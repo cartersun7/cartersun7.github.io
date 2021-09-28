@@ -1,0 +1,208 @@
+---
+title: "Lab 1"
+author: "Carter Sun"
+date: "9/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+
+years <- 2017:2021
+quarters <- 1:4
+categories <- 1:2
+twentytwentonequarters <- 1:2
+type <- "Electric"
+
+pge_elec <- NULL
+pge_gas <- NULL
+
+for (category in categories) {
+  for (year in years) {
+    if (year == 2021) {
+      for (q in twentytwentonequarters)
+      filename <- 
+        paste0(
+          "PGE_A1/CSVs/pge/PGE_2021_Q", 
+          q, 
+          "_",
+          type,
+          "UsageByZip.csv"
+        )
+       print(filename)
+  temp <- read_csv(filename)
+  if (type == "Electric") {
+    pge_elec <- rbind(pge_elec,temp)
+    saveRDS(pge_elec, "pge_elec.rds")
+  }
+  else {
+    pge_gas <- rbind(pge_gas,temp)
+    saveRDS(pge_gas, "pge_gas.rds")
+  }
+    }
+    else for(quarter in quarters) {
+      filename <- 
+        paste0(
+          "PGE_A1/CSVs/pge/PGE_", 
+          year, 
+          "_Q", 
+          quarter, 
+          "_", 
+          type,
+          "UsageByZip.csv"
+        )
+      print(filename)
+  temp <- read_csv(filename)
+  if (type == "Electric") {
+    pge_elec <- rbind(pge_elec,temp)
+    saveRDS(pge_elec, "pge_elec.rds")
+  }
+  else {
+    pge_gas <- rbind(pge_gas,temp)
+    saveRDS(pge_gas, "pge_gas.rds")
+  }
+    }
+  }
+  type = "Gas"
+}
+```
+
+```{r include=FALSE}
+pge_elec_final <- 
+  pge_elec %>% 
+  filter (
+    CUSTOMERCLASS %in% 
+      c("Elec- Residential", "Elec- Commercial")
+    ) %>% 
+  select(
+    -COMBINED, -AVERAGEKWH, -TOTALCUSTOMERS
+    ) %>% 
+  group_by(
+    MONTH,YEAR,CUSTOMERCLASS
+    ) %>% 
+  summarize(
+    TOTALKWH = sum(TOTALKWH, na.rm = T),
+    ) %>% 
+  mutate(
+    TOTALKBTU = 3.412*TOTALKWH,
+    DATE = paste(
+        YEAR,MONTH,"01",sep="-"
+      ) %>% 
+      as.Date()
+    ) %>% 
+  select (-TOTALKWH)
+
+pge_gas_final <-
+  pge_gas %>% 
+  filter (
+    CUSTOMERCLASS %in% 
+      c("Gas- Residential", "Gas- Commercial")
+    ) %>% 
+  select(
+    -COMBINED,-AVERAGETHM,-TOTALCUSTOMERS
+    ) %>% 
+  group_by(
+    MONTH,YEAR,CUSTOMERCLASS
+    ) %>% 
+  summarize(
+    TOTALTHM = sum(TOTALTHM, na.rm = T),
+    ) %>% 
+  mutate(
+    TOTALKBTU = 100*TOTALTHM,
+    DATE = paste(
+      YEAR,MONTH,"01",sep="-"
+      ) %>% 
+      as.Date()
+    ) %>% 
+  select (-TOTALTHM)
+```
+
+```{r include=FALSE}
+pge_combined <- rbind(pge_elec_final, pge_gas_final)
+pge_commercial <- 
+  filter (
+    pge_combined, CUSTOMERCLASS %in% 
+      c("Elec- Commercial", "Gas- Commercial")
+    )
+pge_residential <-
+  filter (
+    pge_combined, CUSTOMERCLASS %in%
+      c("Elec- Residential", "Gas- Residential")
+  )
+```
+
+```{r include=FALSE}
+pge_commercial_chart <- 
+  pge_commercial %>% 
+  ggplot() + geom_bar(
+    aes(
+      x = DATE %>% factor(),
+      y = TOTALKBTU,
+      fill  = CUSTOMERCLASS
+    ),
+    stat = "identity",
+    position = "stack"
+  ) +
+  labs (
+    x = "Date",
+    y = "kBtu",
+    title = "PG&E Commercial Monthly Energy Usage, 2017-2021",
+    fill = "Energy Type"
+  ) +
+  theme (axis.text.x = element_text(angle=90))
+
+
+
+```
+
+```{r include=FALSE}
+pge_residential_chart <- 
+  pge_residential %>% 
+  ggplot() + geom_bar(
+    aes(
+      x = DATE %>% factor(),
+      y = TOTALKBTU,
+      fill  = CUSTOMERCLASS
+    ),
+    stat = "identity",
+    position = "stack"
+  ) +
+  labs (
+    x = "Date",
+    y = "kBtu",
+    title = "PG&E Residential Monthly Energy Usage, 2017-2021",
+    fill = "Energy Type"
+  ) +
+  theme (axis.text.x = element_text(angle=90))
+
+
+```
+
+
+```{r echo=FALSE}
+pge_residential_chart %>% 
+  ggplotly() %>% 
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>% 
+  config(displayModeBar = F)
+pge_commercial_chart %>% 
+  ggplotly() %>% 
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>% 
+  config(displayModeBar = F)
+```
+
+Analysis of the data:
+
+Looking at the graphed data, there are a few observable changes in energy consumption that may be attributable to the COVID-19 pandemic. One such change is the decrease in commercial energy use from April to October 2020m where both gas and electric usage hit record lows. This is most likely attributed to the COVID-19 pandemic because of the Stay At Home Orders in the Bay Area, where citizens were forced to quarantine at home and prohibited from going to work. Similarly, around December 2020/January 2021, when the number of cases in California started to lower, and more people started to return to work, the commercial energy usage in California returned to what it was before the pandemic.Surprisingly, the residential energy usage did not experience any substantial changes, even though I assumed the opposite would happen, as people had to stay exclusively at home. This is most likely because people use the most energy at night (cooking dinner, turning on the lights, charging electronic devices), meaning that even though they were quarantining at home, they weren't using any more energy than they would if they were at work. One caveat about the data source is that PG&E does not service all of California, but only certain parts of Northern and Central California. This may affect the data by not showing how the pandemic affected California's energy usage as a whole, since Los Angeles and Southern California are not serviced by PG&E, and Southern California experienced the worst of the COVID-19 Pandemic in California. Since the severity of the COVID mandates were highest in Southern California, while Northern California handled the pandemic better, the data does not paint an appropriate picture of how California's usage of energy was affected by the pandemic.
+

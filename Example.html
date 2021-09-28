@@ -172,6 +172,44 @@ pre code {
 </div>
 
 
+<pre class="r"><code>library(tidyverse)</code></pre>
+<pre><code>## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──</code></pre>
+<pre><code>## ✓ ggplot2 3.3.5     ✓ purrr   0.3.4
+## ✓ tibble  3.1.4     ✓ dplyr   1.0.7
+## ✓ tidyr   1.1.3     ✓ stringr 1.4.0
+## ✓ readr   2.0.1     ✓ forcats 0.5.1</code></pre>
+<pre><code>## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+## x dplyr::filter() masks stats::filter()
+## x dplyr::lag()    masks stats::lag()</code></pre>
+<pre class="r"><code>health_full &lt;- read_csv(&quot;https://chronicdata.cdc.gov/api/views/swc5-untb/rows.csv?accessType=DOWNLOAD&amp;bom=true&amp;format=true&quot;)</code></pre>
+<pre><code>## Rows: 176008 Columns: 23</code></pre>
+<pre><code>## ── Column specification ────────────────────────────────────────────────────────
+## Delimiter: &quot;,&quot;
+## chr (14): StateAbbr, StateDesc, LocationName, DataSource, Category, Measure,...
+## dbl  (6): Year, Data_Value, Low_Confidence_Limit, High_Confidence_Limit, Lat...
+## lgl  (2): Data_Value_Footnote_Symbol, Data_Value_Footnote</code></pre>
+<pre><code>## 
+## ℹ Use `spec()` to retrieve the full column specification for this data.
+## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.</code></pre>
+<pre class="r"><code>head(health_full)</code></pre>
+<pre><code>## # A tibble: 6 × 23
+##    Year StateAbbr StateDesc     LocationName DataSource Category   Measure      
+##   &lt;dbl&gt; &lt;chr&gt;     &lt;chr&gt;         &lt;chr&gt;        &lt;chr&gt;      &lt;chr&gt;      &lt;chr&gt;        
+## 1  2018 US        United States &lt;NA&gt;         BRFSS      Prevention Current lack…
+## 2  2018 AL        Alabama       Bibb         BRFSS      Health Ou… Cancer (excl…
+## 3  2018 AL        Alabama       Bullock      BRFSS      Health Ou… Cancer (excl…
+## 4  2018 AL        Alabama       Choctaw      BRFSS      Health Ou… Current asth…
+## 5  2018 AL        Alabama       Cleburne     BRFSS      Unhealthy… Binge drinki…
+## 6  2018 AL        Alabama       Cleburne     BRFSS      Unhealthy… Obesity amon…
+## # … with 16 more variables: Data_Value_Unit &lt;chr&gt;, Data_Value_Type &lt;chr&gt;,
+## #   Data_Value &lt;dbl&gt;, Data_Value_Footnote_Symbol &lt;lgl&gt;,
+## #   Data_Value_Footnote &lt;lgl&gt;, Low_Confidence_Limit &lt;dbl&gt;,
+## #   High_Confidence_Limit &lt;dbl&gt;, TotalPopulation &lt;dbl&gt;, Latitude &lt;dbl&gt;,
+## #   Longitude &lt;dbl&gt;, LocationID &lt;chr&gt;, CategoryID &lt;chr&gt;, MeasureId &lt;chr&gt;,
+## #   DataValueTypeID &lt;chr&gt;, Short_Question_Text &lt;chr&gt;, geolocation &lt;chr&gt;</code></pre>
+<pre class="r"><code>write_csv(health_full, &quot;health_full.csv&quot;)
+#health_full_again &lt;- read_csv(&quot;health_full.csv&quot;)
+#rm(health_full_again)</code></pre>
 <div id="r-markdown" class="section level2">
 <h2>R Markdown</h2>
 <p>This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <a href="http://rmarkdown.rstudio.com" class="uri">http://rmarkdown.rstudio.com</a>.</p>
