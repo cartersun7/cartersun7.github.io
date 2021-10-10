@@ -1,0 +1,171 @@
+---
+title: "CarterSun_A3"
+author: "Carter Sun"
+date: "10/7/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = TRUE)
+```
+
+```{r include=FALSE}
+library(censusapi)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(leaflet)
+Sys.setenv(CENSUS_KEY="ae50ac1baf05a1c9f156a1c83c62722ac7838e04")
+```
+
+```{r include=FALSE}
+temp <- tempfile()
+download.file("https://www2.census.gov/programs-surveys/acs/data/pums/2019/1-Year/csv_hca.zip",destfile = temp)
+
+pums_hca_2019_1yr <- read_csv(unzip(temp,"psam_h06.csv"))
+unlink(temp)
+```
+
+```{r include=FALSE}
+pums_2019_1yr <- getCensus(
+  name = "acs/acs1/pums",
+  vintage = 2019,
+  region = "public use microdata area:*", 
+  regionin = "state:06",
+  vars = c(
+    "SERIALNO",
+    "SPORDER",
+    "PWGTP",
+    "WGTP",
+    "NP",
+    "HHL",
+    "HINCP",
+    "TEN",
+    "HUPAC",
+    "R65"
+  )
+)
+```
+
+```{r include=FALSE}
+ca_pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+bay_counties <-
+  counties("CA", cb = T, progress_bar = F) %>% 
+  filter(NAME %in% bay_county_names)
+
+bay_pumas <-
+  ca_pumas %>% 
+  st_centroid() %>% 
+  .[bay_counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(ca_pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+bay_pums <-
+  pums_2019_1yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area,5,"left","0")
+  ) %>% 
+  filter(PUMA %in% bay_pumas$PUMACE10)
+```
+
+```{r include=FALSE}
+bay_pums_example <-
+  bay_pums %>% 
+  filter(!duplicated(SERIALNO)) %>% 
+  mutate(
+    PWGTP = as.numeric(PWGTP),
+    vuln_age = ifelse(
+        (HUPAC == 1) |
+        (R65 >= 1),
+#HUPAC - HH presence and age of children <6 == 1 
+#R-65 - Presence of 65 yrs or older == 1
+      PWGTP,
+      0
+    )
+  ) %>% 
+  group_by(PUMA) %>% 
+  summarize(
+    perc_vuln_age =
+      sum(vuln_age, na.rm =T)/sum(PWGTP, na.rm = T)*100
+  ) %>% 
+  left_join(
+    bay_pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>% 
+  st_as_sf()
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pums_pal <- colorNumeric(
+  palette = "Oranges",
+  domain = bay_pums_example$perc_vuln_age
+)
+
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = bay_pums_example,
+    fillColor = ~pums_pal(perc_vuln_age),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0(
+      round(perc_vuln_age), 
+      "% of people in this county are vulnerable to heatwaves"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = bay_pums_example,
+    pal = pums_pal,
+    values = ~perc_vuln_age,
+    title = "% of people vulnerable <br> to heatwaves (6 - 65 yrs)"
+  )
+```
+
+
+Total Number of People in the Bay Area who are considered "vulnerable" for heatwave related illnesses:
+```{r include=FALSE}
+vuln_total <-
+  bay_pums %>% 
+  mutate(
+    PWGTP = as.numeric(PWGTP),
+    vuln_age = ifelse(
+        (HUPAC == 1) |
+        (R65 >= 1),
+      PWGTP,
+      0
+    )
+  ) %>% 
+  mutate (
+  total_vuln = sum(vuln_age)
+  )
+```
+```{r echo=FALSE}
+vuln_total$total_vuln[1]
+```
+
+
+Through the interviews and surveys we piloted, there was a common consensus that the most at-risk people were either young children or older adults. Therefore, I graphed the percentage of people between the ages of 6 and 65, where the higher risk areas being a lighter shade, and the lower risk areas being a darker shade. What was surprising about the data is that the Bay Area in general is lower risk for heatwave related illnesses. However, this might be attributed to the fact that many young people move to the Bay Area for jobs in Silicon Valley, bringing down the median age, and therefore the risk level for heatwave related illnesses.
+
