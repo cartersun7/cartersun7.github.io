@@ -1,0 +1,263 @@
+---
+title: "CarterSun_A4"
+author: "Carter Sun"
+date: "10/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(censusapi)
+
+Sys.setenv(CENSUS_KEY="ae50ac1baf05a1c9f156a1c83c62722ac7838e04")
+
+acs_vars_2019_5yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs5",
+    type = "variables"
+  )
+```
+
+
+```{r include=FALSE}
+race_categories <- c(
+  "White alone", "Black or African American alone", "American Indian and Alaska Native alone", "Asian alone", "Native Hawaiian and Other Pacific Islander alone", "Some other race alone", "Two or more races"
+)
+
+bay_education_race <-
+  1:7 %>% 
+  map_dfr(function(x){
+    getCensus(
+      name = "acs/acs5",
+      vintage = 2019,
+      region = "county:001,013,041,055,075,081,085,095,097",
+      regionin = "state:06",
+      vars = paste0("group(C15002",LETTERS[x],")")
+    ) %>%
+      select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+      pivot_longer(
+        ends_with("E"),
+        names_to = "name",
+        values_to = "estimate"
+      ) %>%
+      left_join(
+        acs_vars_2019_5yr %>% 
+          select(name, label)
+      ) %>% 
+      select(-name) %>% 
+      separate(
+        label,
+        into = c(NA,NA,NA,"education"),
+        sep = "!!"
+      ) %>% 
+      filter(!is.na(education)) %>%   
+      group_by(county, education) %>% 
+      summarize(estimate = sum(estimate)) %>% 
+      mutate(race = race_categories[x]) 
+      
+  })
+bay_education_race <- subset(bay_education_race,bay_education_race$county == "081")
+      
+```
+
+```{r echo=FALSE, warning=FALSE}
+bay_race_total <-
+  bay_education_race %>% 
+  group_by(race) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  mutate(education = "Total")
+
+bay_education_race %>% 
+  group_by(education, race) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  rbind(bay_race_total) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = education %>% factor(levels = rev(c("Total","Less than high school diploma","High school graduate (includes equivalency)","Some college or associate's degree", "Bachelor's degree or higher"))),
+      y = estimate,
+      fill = race %>% factor(levels = rev(unique(bay_education_race$race)))
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Education Attainment",
+    y = "Proportion of population 25 years or older",
+    title = "San Mateo County Education\nAttainment by Race",
+    fill = "Race of householder"
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+```
+
+```{r include=FALSE}
+acs_vars_2019_1yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs1",
+    type = "variables"
+  )
+
+
+ethnicity_categories <- c(
+  "White, not Latinx","Latinx"
+)
+
+bay_education_ethnicity <-
+  8:9 %>% 
+  map_dfr(function(x){
+    getCensus(
+      name = "acs/acs1",
+      vintage = 2019,
+      region = "county:001,013,041,055,075,081,085,095,097",
+      regionin = "state:06",
+      vars = paste0("group(B15002",LETTERS[x],")")
+    ) %>%
+      select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+      pivot_longer(
+        ends_with("E"),
+        names_to = "name",
+        values_to = "estimate"
+      ) %>%
+      left_join(
+        acs_vars_2019_1yr %>% 
+          select(name, label)
+      ) %>% 
+      select(-name) %>% 
+      separate(
+        label,
+        into = c(NA,NA,NA,"education"),
+        sep = "!!"
+      ) %>% 
+      filter(!is.na(education)) %>%   
+      group_by(county, education) %>% 
+      summarize(estimate = sum(estimate)) %>% 
+      mutate(ethnicity = ethnicity_categories[x-7]) 
+  }) %>% 
+  subset(county == "081") %>% 
+  mutate (
+    education = 
+    case_when(
+      education %in% c("9th to 12th grade, no diploma", "Less than 9th grade") ~ "Less than high school diploma",
+      education %in% c("Regular high school diploma", "GED or alternative credential") ~ "High school graduate (includes equivalency)",
+      education %in% c("Associate's degree", "Some college, no degree") ~ "Some college or associate's degree",
+      education %in% c("Bachelor's degree", "Graduate or professional degree") ~ "Bachelor's degree or higher"
+    )
+  ) %>% 
+  group_by(county, ethnicity, education) %>% 
+  summarize(estimate = sum(estimate))
+  
+    
+```
+
+
+```{r include=FALSE}
+total <- getCensus(
+    name = "acs/acs5",
+    vintage = 2019,
+    region = "county:001,013,041,055,075,081,085,095,097",
+    regionin = "state:06",
+    vars = "group(B15002)"
+  ) %>%
+  select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+  pivot_longer(
+    ends_with("E"),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>% 
+      select(name, label)
+  ) %>% 
+  select(-name) %>% 
+  separate(
+    label,
+    into = c(NA,NA,NA,"education"),
+    sep = "!!"
+  ) %>% 
+  filter(!is.na(education)) %>% 
+  group_by(county, education) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  subset(county == "081")%>% 
+  mutate (
+    education = 
+    case_when(
+      education %in% c("No schooling completed","Nursery to 4th grade","5th and 6th grade","7th and 8th grade","9th grade","10th grade", "11th grade", "12th grade, no diploma") ~ "Less than high school diploma",
+      education %in% c("High school graduate (includes equivalency)") ~ "High school graduate (includes equivalency)",
+      education %in% c("Associate's degree", "Some college, less than 1 year", "Some college, 1 or more years, no degree") ~ "Some college or associate's degree",
+      education %in% c("Bachelor's degree", "Doctorate degree", "Master's degree", "Professional school degree") ~ "Bachelor's degree or higher"
+    )
+  ) %>% 
+  group_by(county, education) %>% 
+  summarize(estimate = sum(estimate))
+
+
+total_white_latinx <-
+  bay_education_ethnicity %>% 
+  group_by(county, education) %>% 
+  summarize(estimate = -1*sum(estimate))
+
+not_white_not_latinx <-
+  rbind(total, total_white_latinx) %>% 
+  group_by(county, education) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  mutate(ethnicity = "Not white, not Latinx")
+
+bay_education_ethnicity <-
+  rbind(bay_education_ethnicity, not_white_not_latinx)
+```
+
+```{r echo=FALSE, warning=FALSE}
+bay_ethnicity_total <-
+  bay_education_ethnicity %>% 
+  group_by(ethnicity) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  mutate(education = "Total")
+
+bay_education_ethnicity %>% 
+  group_by(education, ethnicity) %>% 
+  summarize(estimate = sum(estimate)) %>% 
+  rbind(bay_ethnicity_total) %>% 
+  ggplot() +
+  geom_bar(
+    aes(
+      x = education %>% factor(levels = rev(c("Total","Less than high school diploma","High school graduate (includes equivalency)","Some college or associate's degree", "Bachelor's degree or higher"))),
+      y = estimate,
+      fill = ethnicity %>% factor(levels = rev(unique(bay_education_ethnicity$ethnicity)))
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Education Attainment",
+    y = "Proportion of population 25 years or older",
+    title = "San Mateo County Education\nAttainment by Ethnicity",
+    fill = "Ethnicity of householder"
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+```
+
+In San Mateo county, there is definitely a disporportionate education attainment by both race and ethnicity. For African Americans, there is a considerably large proportion of their population that only has a high school diploma or a GED, while the proportion of African Americans with a Bachelor's degree or higher is a lot smaller. However, for white householders, who are statistically more affluent than African Americans in San Mateo County, are more evenly spread, with the highest proportion having a Bachelor's degree or higher. Similarly, while looking at ethnicity, the majority Latinx housholders have either less than or a high school diploma, while a small proportion has any college experience at all. Inversely, the largest proportion of White, not Latinx housholders have a Bachelor's degree or higher, while the smallest has less than a high school diploma. This definitely points to a clear disproportion in education attainment in San Mateo County.
+
+
