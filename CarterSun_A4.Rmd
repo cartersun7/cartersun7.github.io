@@ -64,7 +64,7 @@ bay_education_race <- subset(bay_education_race,bay_education_race$county == "08
       
 ```
 
-```{r echo=FALSE, warning=FALSE}
+```{r echo=FALSE}
 bay_race_total <-
   bay_education_race %>% 
   group_by(race) %>% 
@@ -219,7 +219,7 @@ bay_education_ethnicity <-
   rbind(bay_education_ethnicity, not_white_not_latinx)
 ```
 
-```{r echo=FALSE, warning=FALSE}
+```{r echo=FALSE}
 bay_ethnicity_total <-
   bay_education_ethnicity %>% 
   group_by(ethnicity) %>% 
