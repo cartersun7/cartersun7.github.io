@@ -22,7 +22,6 @@ ces4 <- read_excel(
 )
 
 ces4_clean <- ces4 %>% 
-  #select(!ends_with("Pctl")) 
   select("Census Tract", "Total Population","California County","ZIP","Approximate Location","Longitude", "Latitude", "PM2.5","Asthma")
 
 ca_tracts <- tracts("CA", county = 085)
@@ -42,7 +41,7 @@ mapview(ces4_map, zcol = "Asthma")
 mapview(ces4_map, zcol = "PM2.5")
 ```
 
-These two maps depict the CalEnviroScreen 4.0 scores for high Asthma and PM2.5 prevalence in California from 2021. High asthma prevalence is measured by the rate of emergency department visits per 10,000, while high PM2.5 prevalence is measured by the annual mean concentration of PM2.5, which refers to particles that are two and a half microns or less in width. The areas of California that have the highest prevalence of PM2.5 is in the Central California area, around Fresno, Hanford, Visalia, and Bakersfield. The areas of California that have the highest prevalence of Asthma seems to be Central California again, as well the LA area. 
+These two maps depict the CalEnviroScreen 4.0 scores for high Asthma and PM2.5 prevalence in the Bay Area from 2021. High asthma prevalence is measured by the rate of emergency department visits per 10,000, while high PM2.5 prevalence is measured by the annual mean concentration of PM2.5, which refers to particles that are two and a half microns or less in width. The areas of Northern California that have the highest prevalence of PM2.5 is in the Central California area, around Fresno, Hanford, Visalia, and Bakersfield. The areas of California that have the highest prevalence of Asthma seems to be Central California as well. Both the high PM2.5 and asthma prevalences could be correlated to the fires that have been plaguing Central California over the past few years.
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 ggplot(
