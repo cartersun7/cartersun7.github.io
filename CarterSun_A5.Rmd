@@ -1,0 +1,99 @@
+---
+title: "CarterSun_A5"
+author: "Carter Sun"
+date: "10/24/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include=FALSE}
+library(tidyverse)
+library(censusapi)
+library(sf)
+library(tigris)
+library(mapview)
+library(readxl)
+
+ces4 <- read_excel(
+  "calenviroscreen40resultsdatadictionary_F_2021.xlsx"
+)
+
+ces4_clean <- ces4 %>% 
+  #select(!ends_with("Pctl")) 
+  select("Census Tract", "Total Population","California County","ZIP","Approximate Location","Longitude", "Latitude", "PM2.5","Asthma")
+
+ca_tracts <- tracts("CA", county = 085)
+
+ces4_map <- ces4_clean %>% 
+  left_join(
+    ca_tracts %>% 
+      transmute(GEOID = GEOID %>% as.numeric()),
+    by = c("Census Tract" = "GEOID")
+  ) %>% 
+  st_as_sf()
+
+```
+
+```{r echo=FALSE}
+mapview(ces4_map, zcol = "Asthma")
+mapview(ces4_map, zcol = "PM2.5")
+```
+
+These two maps depict the CalEnviroScreen 4.0 scores for high Asthma and PM2.5 prevalence in California from 2021. High asthma prevalence is measured by the rate of emergency department visits per 10,000, while high PM2.5 prevalence is measured by the annual mean concentration of PM2.5, which refers to particles that are two and a half microns or less in width. The areas of California that have the highest prevalence of PM2.5 is in the Central California area, around Fresno, Hanford, Visalia, and Bakersfield. The areas of California that have the highest prevalence of Asthma seems to be Central California again, as well the LA area. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(
+   data = ces4_map,
+   aes(
+    x = PM2.5,
+    y = Asthma
+  )
+) +
+ geom_point() + 
+ geom_smooth(method="lm")
+```
+
+The best fit line on the graph points to a clear correlation between the number of particles less than 2.5 microns wide, and the cases of asthma in a certain area. The more particles there are, the higher the number of cases of asthma there are. The fitness of this best fit line could be better, though, since it ignores a lot of the points in the middle, treating them as outliers, instead of factoring them into the line.
+
+```{r echo=FALSE}
+model <- lm(Asthma ~ PM2.5, ces4_map)
+summary(model)
+```
+
+The model coefficient is statistically significant because the p values of the intercept and the PM2.5 coefficient are very small. Furthermore, the increase of 1 in x (PM2.5) is associated with an increase of 1.7228 in y (asthma). Also,  1.491% of the variation in the y (asthma) is explained by the variation in x (PM2.5).
+
+```{r echo=FALSE}
+plot(density(residuals(model)))
+```
+
+The residual distribution is wrong because the residuals are not normally distributed, but instead there is a long positive tail. 
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(
+   data = ces4_map,
+   aes(
+    x = PM2.5,
+    y = log(Asthma)
+  )
+) +
+ geom_point() + 
+ geom_smooth(method="lm")
+```
+
+After performing a logarithmic transformation, the best fit line is steeper, and there are less outliers. It accounts for more of the data points, and overall is a better fit line than without the logarithmic transformation.
+
+```{r echo=FALSE}
+log_model <- lm(log(Asthma) ~ PM2.5, ces4_map)
+summary(log_model)
+```
+After performing a linear regression analysis with a log transformation on my model, the model coefficient remains statistically significant. The p values of the intercept and the PM2.5 coefficient stay the same, and are still very small (<2e-16). The increase of 1 in x (PM2.5) is associated with an increase of 0.04387 in y (asthma). Also,  2.682% of the variation in the y (asthma) is explained by the variation in x (PM2.5).
+
+
+```{r echo=FALSE}
+plot(density(residuals(log_model)))
+```
+After plotting the residual distribution with log(y) values, the residuals are more normally distributed, and there aren't any tails, meaning this is a correct residual distribution.
