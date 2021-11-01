@@ -1,0 +1,124 @@
+---
+title: "CarterSun_A6"
+author: "Carter Sun"
+date: "10/30/2021"
+output: html_document
+---
+
+```{r include=FALSE}
+library(censusapi)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(leaflet)
+Sys.setenv(CENSUS_KEY="ae50ac1baf05a1c9f156a1c83c62722ac7838e04")
+
+```
+
+```{r include=FALSE}
+pums_2019_1yr <- readRDS("a6_pums.rds")
+
+ca_pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+sf_boundary <-
+  counties("CA", cb = T, progress_bar = F) %>% 
+  filter(NAME == "San Francisco")
+
+sf_pumas <-
+  ca_pumas %>% 
+  st_centroid() %>% 
+  .[sf_boundary, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(ca_pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+```
+```{r include=FALSE}
+sf_pums <- pums_2019_1yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area,5,"left","0")
+  ) %>% 
+  filter(PUMA %in% sf_pumas$PUMACE10) %>% 
+  filter(as.numeric(YBL) %in% 1:3) %>% 
+  group_by(SERIALNO) %>% 
+  summarize(WGTP = first(WGTP), YBL = first(YBL), BLD = first(BLD), TEN = first(TEN), MV = first(MV), AGEP = min(AGEP), HINCP = first(HINCP), PUMA = first(PUMA)) %>% 
+  mutate(
+    leadrisk = ifelse(
+      (HINCP >= 90000) & (AGEP <= 6),
+      1,
+      0
+    )
+  )
+```
+
+```{r include=FALSE}
+sf_pums_logit <- sf_pums %>% 
+  mutate(
+   BLD = BLD %>% 
+     factor(
+       levels = sf_pums$BLD %>% 
+         unique() %>% 
+         as.numeric() %>% 
+         sort()
+     ),
+   TEN = TEN %>% 
+     factor(
+       levels = sf_pums$TEN %>% 
+         unique() %>% 
+         as.numeric() %>% 
+         sort()
+     ),
+   MV = MV %>% 
+     factor(
+       levels = sf_pums$MV %>% 
+         unique() %>% 
+         as.numeric() %>% 
+         sort()
+     ),
+   PUMA = PUMA %>% 
+     factor(
+       levels = sf_pums$PUMA %>% 
+         unique() %>% 
+         sort()
+     )
+  )
+```
+Summary of the Logistic Model:
+```{r echo=FALSE}
+logit_model <- glm(
+  leadrisk ~ BLD + TEN + MV + PUMA,
+  family = quasibinomial(),
+  data = sf_pums_logit
+)
+
+summary(logit_model)
+
+```
+Prediction:
+```{r echo=FALSE}
+predict(logit_model, sample_n(sf_pums_logit,1), type = "response")
+```
+
+```{r include=FALSE}
+predicted_scores <-
+  predict(logit_model, sf_pums_logit, type = "response")
+test = cbind(sf_pums_logit, predicted_scores) %>% summarize(predicted_scores, leadrisk)
+```
+Confusion Matrix:
+```{r echo=FALSE}
+matrix <-
+  test %>% 
+  mutate(
+    leadrisk = ifelse(
+      leadrisk == 0,
+      "No (No Leadrisk)",
+      "Yes (Yes Leadrisk)"
+      )
+    ) %>% 
+      pull(leadrisk) %>% 
+      table(predicted_scores > 0.1)
+matrix
+```
+
+The confusion matrix returned that there were 2199 true negatives, 1 true positive, 60 false negatives, and 4 false positives. This means that the logistic model accurately predicted that there was no lead risk in houses that actually had no lead risk, which was the case for the majority of the homes (2166). However, there was only one case where the was a lead risk, and that was actually detected. Instead, there were 60 cases where there was a lead risk, but it was predicted that there wasn't. This is dangerous, becuase there was lead detected, but the homeowners were not alerted to it. And in 4 instances, there was no lead risk, but the logistic model predicted that there was one. Roughly, the total number of postcards mailed out was 61, but the percentage that actually went out to low-income households with children was 1.66%. This is highly problematic, as that number should be a lot higher. In order to improve this strategy and target more low-income households with children, more factors need to be considered when creating the dataset. Also, if there is one house in a neighborhood at risk of lead, all houses in that area should be checked, as there is a high chance, if they were built at around the same time, that they were made with the same materials that contain lead.
+
