@@ -1,0 +1,489 @@
+---
+title: "Income and Educational Inequality in the Bay Area"
+author: "Carter Sun"
+date: "12/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warnings = FALSE, messages = FALSE)
+```
+
+```{r include=FALSE}
+library(tigris)
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(censusapi)
+library(leaflet)
+library(StatMatch)
+library(plotly)
+
+Sys.setenv(CENSUS_KEY="ae50ac1baf05a1c9f156a1c83c62722ac7838e04")
+
+acs_vars_2019_5yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs5",
+    type = "variables"
+  )
+```
+
+The Bay Area is one of the wealthiest regions in the world. Attracting burgeoning tech startups that become successful, as well as the wealth that comes with it, the Bay Area is also home to four of the top ten most expensive zip codes in the United States according to CNBC: Atherton, Palo Alto, Los Altos, and Ross, with Atherton coming out as the most expensive zip code for the third year in a row, and the wealthiest zip code in the world. However, less than six miles away from Atherton is East Palo Alto and North Fair Oaks, which, along with Oakland and Richmond, are some of the less affluent cities in the Bay Area. Not only is there stark income inequality in the Bay Area, there is also edcuational inequality. According to Niche.com, Palo Alto and Los Altos have the second and third best school districts, while East Palo Alto has the worst school district. The goal of my project is to look at why such stark inequality, both income and educational, exists in the Bay Area, especially between cities so close together.
+
+```{r include=FALSE}
+ 
+ca_counties <- counties("CA", cb = T, progress_bar = F)
+bay_county_names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+bay_counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% bay_county_names)
+
+usa_zips <-
+  zctas(cb=T, progress_bar = F)
+bay_zips <-
+  usa_zips %>% 
+  st_centroid() %>% 
+  .[bay_counties, ] %>% 
+  st_set_geometry(NULL) %>%
+  left_join(usa_zips %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+zipcode_cities <- read_csv("zip_code_database.csv") %>% 
+  mutate(
+    ZIPCODE = zip,
+    CITY = primary_city,
+  )
+zipcode_cities <- within(zipcode_cities, {
+  f <- ZIPCODE == '94303'
+  CITY[f] <- 'East Palo Alto'
+})
+zipcode_cities <- within(zipcode_cities, {
+  f <- ZIPCODE == '94061'
+  CITY[f] <- 'North Fair Oaks'
+})
+zipcode_cities <- within(zipcode_cities, {
+  f <- ZIPCODE == '94063'
+  CITY[f] <- 'North Fair Oaks'
+})
+zipcode_cities <- within(zipcode_cities, {
+  f <- ZIPCODE == '94014'
+  CITY[f] <- 'Coloma'
+})
+```
+
+```{r include=FALSE}
+#Data from ACS but edited to include ZCTA data
+bay_med_income <-
+  read_csv("ACS5_2019_Income_Edited.csv")[-1,] %>% 
+  mutate(
+    ZIPCODE = substr(NAME, 7, 11),
+    MED_INCOME = ifelse(
+      S1901_C01_012E == "250,000+",
+      250000,
+      as.numeric(S1901_C01_012E)
+    )
+  ) %>% 
+  left_join(zipcode_cities) %>% 
+  select(c(ZIPCODE, MED_INCOME, CITY)) %>% 
+  right_join(
+    bay_zips %>% select(GEOID10),
+    by = c("ZIPCODE" = "GEOID10")
+  ) %>% 
+  right_join(
+    bay_zips %>% select(GEOID10),
+    by = c("ZIPCODE" = "GEOID10")
+  ) %>% 
+  st_as_sf() %>% 
+  st_transform(4326)
+  
+```
+
+```{r echo=FALSE}
+inc_pal <- colorNumeric (
+  palette = "Blues",
+  domain = bay_med_income$MED_INCOME
+)
+
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(
+    data = bay_med_income,
+    fillColor = ~inc_pal(MED_INCOME),
+    color = "white",
+    opacity = 0.5, 
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0(
+      "Median income of ",
+      CITY,
+      ": ",
+      MED_INCOME
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = bay_med_income,
+    pal = inc_pal,
+    values = ~MED_INCOME,
+    title = "Median Income in <br> the Bay Area, 2019"
+  )
+```
+
+```{r include=FALSE}
+#Data from ACS but edited to include ZCTA data and made it smaller to be able to commit to GitHub
+bay_education <- read_csv("ACS5_2019_Education_Edited.csv")[-1,] %>% 
+  mutate(
+    total_pop = as.numeric(S1501_C01_025E) + as.numeric(S1501_C01_022E) + as.numeric(S1501_C01_019E) + as.numeric(S1501_C01_016E) + as.numeric(S1501_C01_006E),
+    total_bach = as.numeric(S1501_C01_015E) + as.numeric(S1501_C01_018E) + as.numeric(S1501_C01_021E) + as.numeric(S1501_C01_024E) + as.numeric(S1501_C01_027E)
+  ) %>% 
+  transmute(
+    ZIPCODE = substr(NAME, 7, 11),
+    PERC_BACH = 100*total_bach/total_pop
+  )%>% 
+  left_join(zipcode_cities) %>% 
+  select(c(ZIPCODE, PERC_BACH, CITY)) %>% 
+  right_join(
+    bay_zips %>% select(GEOID10),
+    by = c("ZIPCODE" = "GEOID10")
+  ) %>% 
+  right_join(
+    bay_zips %>% select(GEOID10),
+    by = c("ZIPCODE" = "GEOID10")
+  ) %>% 
+  st_as_sf() %>% 
+  st_transform(4326)
+
+```
+
+```{r echo=FALSE}
+edu_pal <- colorNumeric (
+  palette = "Blues",
+  domain = bay_education$PERC_BACH
+)
+
+leaflet() %>% 
+  addTiles() %>% 
+  addPolygons(
+    data = bay_education,
+    fillColor = ~edu_pal(PERC_BACH),
+    color = "white",
+    opacity = 0.5, 
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0(
+      round(PERC_BACH),
+      "% of adults have a college degree in ",
+      CITY
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = bay_education,
+    pal = edu_pal,
+    values = ~PERC_BACH,
+    title = "% of adults (25+) with <br> a bachelor's degree or <br> higher in the Bay Area, <br> 2019"
+  )
+```
+
+```{r include=FALSE}
+combined <- 
+  bay_education %>% 
+  st_drop_geometry() %>% 
+  left_join(bay_med_income) %>% 
+  select(c(CITY, PERC_BACH, MED_INCOME))
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(
+    data = combined,
+    aes(
+      x = MED_INCOME,
+      y = PERC_BACH
+    )
+  )+
+  geom_point() +
+  geom_smooth(method = "lm") +
+    labs(
+      x = "Household Median Income (dollars)",
+      y = "% of adults with a bach degree or higher",
+      title = "Correlation Between Income and Educational Attainment"
+    )
+```
+
+Looking at both maps, it is evident that there is stark income inequality and educational inequality in the Bay Area, even between zip codes that are right next to each other. It is also very clear that, from looking at the plot, there is a clear correlation between educational attainment and median household income. However, one reason this might occur is because families who don't speak English fluently have a harder time finding a job and making money, which leads to a lower educational attainment for their children, and continues the cycle of poverty. The Bay Area is a very diverse place, and areas like Atherton have a very high percentage of fluent English speakers, while areas like East Palo Alto have a high percentage of immigrants, whose first language is not necessarily English. 
+
+```{r echo=FALSE}
+bay_multiple_tract <- 
+  getCensus(
+    name = "acs/acs5",
+    vintage = 2019,
+    region = "tract:*",
+    regionin = "state:06+county:001,013,041,055,075,081,085,095,097",
+    vars = c(
+      "B06009_001E",
+      "B06009_002E",
+      "B06009_003E",
+      "B19001_001E",
+      "B19001_014E",
+      "B19001_015E",
+      "B19001_016E",
+      "B19001_017E",
+      "B06007_008E",
+      "B06007_001E",
+      "B06007_002E",
+      "B06007_007E"
+    )
+  ) %>% 
+  transmute(
+    tract = paste0(state, county, tract),
+    perc_college = 1 - (B06009_002E + B06009_003E) / B06009_001E,
+    perc_over100k = (B19001_014E + B19001_015E + B19001_016E + B19001_017E) / B19001_001E,
+    perc_fluent_english = (B06007_002E + B06007_007E) / B06007_001E
+  ) %>%
+  filter(
+    !is.na(perc_college), 
+    !is.na(perc_over100k),
+    !is.na(perc_fluent_english)
+  )
+plot_ly(data = bay_multiple_tract, x=~perc_fluent_english, y=~perc_college, z=~perc_over100k, type="scatter3d", mode="markers", color = ~perc_over100k)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+a <- ggplot(
+    data = bay_multiple_tract,
+    aes(
+      x = perc_college,
+      y = perc_fluent_english
+    )
+  )+
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ b<- ggplot(
+    data = bay_multiple_tract,
+    aes(
+      x = perc_over100k,
+      y = perc_fluent_english
+    )
+  ) +
+  geom_point() +
+  geom_smooth(method = "lm")
+ 
+ chart <- subplot(a,b) %>% 
+   layout(title = "English Fluency Compared to Income and Education")
+ chart
+```
+
+
+```{r echo=FALSE}
+model <- lm(perc_college ~ perc_over100k + perc_fluent_english, bay_multiple_tract)
+
+summary(model)
+```
+
+Looking at the 3D plot, we can see that there is a clear correlation between educational attainment, income, and language spoken at home. The two plots reinforce this correlation, with the best-fit lines showing an even clearer picture of the strong correlations between English fluency, educational attainment, income. Both show a very strong correlation, especially the plot comparing English fluency and educational attainment, where the best-fit line matches the trend of the data very closely. Furthermore, the model shows that the variables and model are significant; there is a high r-squared value, so 82% of variance is explained. There is also a very low p-value (p<2.2e-16) and a high F-static, meaning that the variable and model are significant, and that the correlation is strong.
+
+```{r include=FALSE}
+bay_combined_zips <- 
+  bay_education %>% 
+  st_drop_geometry() %>% 
+  left_join(bay_med_income) %>% 
+  select(c(ZIPCODE, PERC_BACH, MED_INCOME)) %>% 
+  filter(
+    !is.na(PERC_BACH),
+    !is.na(MED_INCOME)
+  )
+
+obs_matrix <-
+  bay_combined_zips %>% 
+  select(
+    PERC_BACH, 
+    MED_INCOME
+  ) %>% 
+  as.matrix()
+
+dist_matrix <- mahalanobis.dist(obs_matrix)
+
+rownames(dist_matrix) <- bay_combined_zips$ZIPCODE
+colnames(dist_matrix) <- bay_combined_zips$ZIPCODE
+
+dist_matrix_pairmatch <- dist_matrix
+diag(dist_matrix_pairmatch) <- NA
+
+matched_pair_zip <-
+  1:nrow(dist_matrix_pairmatch) %>% 
+  map_dfr(function(x){
+    min_index <- which(dist_matrix_pairmatch[x, ] == min(dist_matrix_pairmatch[x, ], na.rm = T))
+    data.frame(
+      zip = bay_combined_zips$ZIPCODE[x],
+      matched_tract = bay_combined_zips$ZIPCODE[min_index]
+    )
+    
+  })
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+bay_zips <- bay_zips %>% mutate(ZIPCODE = ZCTA5CE10)
+match_set_zip <- dist_matrix["94063", ] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  rename(
+    ZIPCODE = rowname,
+    match = "."
+  ) %>% 
+  right_join(
+    bay_combined_zips
+  ) %>% 
+  arrange(match) %>% 
+  .[1:21, ] %>% 
+  left_join(bay_zips %>% select(ZIPCODE = GEOID10)) %>% 
+  st_as_sf()
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = match_set_zip[1, ],
+    color = "red"
+  ) %>% 
+  addPolygons(
+    data = match_set_zip[-1, ]
+  ) %>% 
+  addMarkers(
+    lng = -122.4637231,
+    lat = 37.6871001
+  )
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+bay_zips <- bay_zips %>% mutate(ZIPCODE = ZCTA5CE10)
+match_set_zip <- dist_matrix["94027", ] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  rename(
+    ZIPCODE = rowname,
+    match = "."
+  ) %>% 
+  right_join(
+    bay_combined_zips
+  ) %>% 
+  arrange(match) %>% 
+  .[1:21, ] %>% 
+  left_join(bay_zips %>% select(ZIPCODE = GEOID10)) %>% 
+  st_as_sf()
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = match_set_zip[1, ],
+    color = "red"
+  ) %>% 
+  addPolygons(
+    data = match_set_zip[-1, ]
+  ) %>% 
+  addMarkers(
+    lng = -122.4696631,
+    lat = 37.7361721
+  )
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+bay_case_study <-
+  bay_education %>% 
+  st_drop_geometry() %>% 
+  left_join(bay_med_income) %>% 
+  select(c(CITY, ZIPCODE, PERC_BACH, MED_INCOME)) %>% 
+  filter(ZIPCODE == "94014" | ZIPCODE =="94127" | ZIPCODE =="94063" | ZIPCODE == "94027")
+
+case_study_chart <- 
+  bay_case_study %>% 
+  ggplot() + geom_bar(
+    aes(
+      x = CITY,
+      y = MED_INCOME,
+      fill = PERC_BACH
+    ),
+    stat = "identity"
+  ) +
+  labs (
+    x = "City",
+    y = "Med Houshold Income (dollars)",
+    title = "Bay Area Case Study of Income and <br> Education in Geographically Close Cities",
+    fill = "% College Degree (Adults 25+)"
+  ) +
+  scale_x_discrete(limits=c("Atherton", "North Fair Oaks", "San Francisco", "Coloma")) +
+  theme(axis.text.x = element_text(angle = -45))
+
+case_study_1 <-case_study_chart %>% 
+  ggplotly() %>% 
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>% 
+  config(displayModeBar = F)
+
+```
+
+```{r include=FALSE}
+lang_zip <- read_csv("ACS5_2019_LANG.csv")[-1,] %>% 
+  mutate(
+    ZIPCODE = substr(NAME, 7, 11),
+    PERC_NONENG = as.numeric(S1601_C01_003E)/as.numeric(S1601_C01_001E) * 100
+  )
+bay_lang_case_study <-
+  lang_zip %>% 
+  filter(ZIPCODE == "94014" | ZIPCODE =="94127" | ZIPCODE =="94063" | ZIPCODE == "94027") %>%
+  left_join(zipcode_cities) %>% 
+  select(c(ZIPCODE, PERC_NONENG, CITY))
+
+lang_case_study_chart <- 
+  bay_lang_case_study %>% 
+  ggplot() + geom_bar(
+    aes(
+      x = CITY,
+      y = PERC_NONENG
+    ),
+    stat = "identity"
+  ) +
+  labs (
+    x = "City",
+    y = "% Non-English Speaking Population",
+    title = "Bay Area Case Study of Non-English <br> Speakers in Geographically Close Cities",
+  ) +
+  scale_x_discrete(limits=c("Atherton", "North Fair Oaks", "San Francisco", "Coloma")) +
+  theme(axis.text.x = element_text(angle = -45))
+
+case_study_2 <- lang_case_study_chart %>% 
+  ggplotly() %>% 
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>% 
+  config(displayModeBar = F)
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+case_study_output <- subplot(case_study_1, case_study_2) %>% 
+  layout(title = "Bay Area Case Study of Income, Education, <br> and Language in Geographically Close Cities")
+case_study_output
+```
+After using Mahalanobis matching, and treating Atherton (94027) and North Fair Oaks (94063) based on Median Household Income and Educational Attainment, San Francisco (94127) and Coloma (94014) emerged as similarly matching zip codes that were also similar in proximity (less than 6 miles apart), as shown by the two maps. The above plot on the left illustrates the stark difference in both income and educational attainment between the four zip codes, with Atherton and San Francisco being the more affluent and educated, and North Fair Oaks and Coloma being the less affluent and educated, despite their close proximity to Atherton and San Francisco. The plot on the right demonstrates how primary language plays a role, as Atherton and San Francisco, being the wealthier and more educated cities, both have low percentages of non-English speakers, while North Fair Oaks and Coloma, being the less affluent and less educated cities, have higher percentages of non-English speakers (greater than 60%).
+
+All in all, the Bay Area is home to a lot of wealth and extremely educated people, but also a lot of income and educational inequality. Through multiple variable regression, as well as 3D plotting, a correlation was established, between one's primary language, and income and educational inequality, where it is hypothesized that when one's primary language is not English, it make school harder, which makes graduating, achieving higher education, and finding a job much more difficult, which in turn makes earning income a bigger challenge. Through Mahalanobis matching, San Francisco and Coloma were found as similar zip codes to Atherton and North Fair Oaks in terms of educational attainment and income. A case study of comparing the two reinforced the hypothesis that one's primary language has affects income and educational attainment, as the wealthier cities (San Francisco, Atherton) had lower percentages of people who didn't speak English well, while the less affluent cities (Coloma, North Fair Oaks) had higher percentages of non-English speakers. In order to combat both income inequality and educational inequality, and make the Bay Area a more just place and a place of equal opportunity, education and jobs must be accessible for people of all backgrounds, including those who's first language is not English. Furthermore, there must be accommodations made for non-English speaking students, in order to assist them in learning to their potential, instead of being restricted by a language barrier. Part of the beauty and success of the Bay Area comes from it's diversity, but we can't allow non-English speaking members of the Bay Area to continue facing income and educational inequality, simply because English was not their first language.

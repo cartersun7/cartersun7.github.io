@@ -1,0 +1,54 @@
+---
+title: "test"
+author: "Carter Sun"
+date: "10/7/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(include = TRUE)
+```
+
+```{r include=FALSE}
+library(censusapi)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(leaflet)
+Sys.setenv(CENSUS_KEY="ae50ac1baf05a1c9f156a1c83c62722ac7838e04")
+```
+
+```{r}
+bay_case_study <-
+  bay_education %>% 
+  st_drop_geometry() %>% 
+  left_join(bay_med_income) %>% 
+  select(c(CITY, ZIPCODE, PERC_BACH, MED_INCOME)) %>% 
+  filter(ZIPCODE == "94014" | ZIPCODE =="94127" | ZIPCODE =="94063" | ZIPCODE == "94027")
+
+case_study_chart <- 
+  bay_case_study %>% 
+  ggplot() + geom_bar(
+    aes(
+      x = factor(CITY, level = c("Atherton", "North Fair Oaks", "San Francisco", "Coloma")),
+      y = MED_INCOME,
+      fill = PERC_BACH
+    ),
+    stat = "identity"
+  ) +
+  labs (
+    x = "City",
+    y = "Med Houshold Income (dollars)",
+    title = "Bay Area Case Study of Income and <br> Education in Geographically Close Cities",
+    fill = "% College Degree (Adults 25+)"
+  )
+
+case_study_chart %>% 
+  ggplotly() %>% 
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>% 
+  config(displayModeBar = F)
+
+```
