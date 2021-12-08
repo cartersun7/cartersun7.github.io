@@ -19,19 +19,18 @@ library(leaflet)
 library(StatMatch)
 library(plotly)
 
-Sys.setenv(CENSUS_KEY="ae50ac1baf05a1c9f156a1c83c62722ac7838e04")
-
 acs_vars_2019_5yr <-
   listCensusMetadata(
     name = "2019/acs/acs5",
     type = "variables"
   )
+Sys.setenv(CENSUS_KEY="ae50ac1baf05a1c9f156a1c83c62722ac7838e04")
+
 ```
 
-The Bay Area is one of the wealthiest regions in the world. Attracting burgeoning tech startups that become successful, as well as the wealth that comes with it, the Bay Area is also home to four of the top ten most expensive zip codes in the United States according to CNBC: Atherton, Palo Alto, Los Altos, and Ross, with Atherton coming out as the most expensive zip code for the third year in a row, and the wealthiest zip code in the world. However, less than six miles away from Atherton is East Palo Alto and North Fair Oaks, which, along with Oakland and Richmond, are some of the less affluent cities in the Bay Area. Not only is there stark income inequality in the Bay Area, there is also edcuational inequality. According to Niche.com, Palo Alto and Los Altos have the second and third best school districts, while East Palo Alto has the worst school district. The goal of my project is to look at why such stark inequality, both income and educational, exists in the Bay Area, especially between cities so close together.
+The Bay Area is one of the wealthiest regions in the world. Attracting burgeoning tech startups that become successful, as well as the wealth that comes with it, the Bay Area is also home to four of the top ten most expensive zip codes in the United States according to CNBC: Atherton, Palo Alto, Los Altos, and Ross, with Atherton coming out as the most expensive zip code for the third year in a row, and the wealthiest zip code in the world. However, less than six miles away from Atherton is East Palo Alto and North Fair Oaks, which, along with Oakland and Richmond, are some of the less affluent cities in the Bay Area. Not only is there stark income inequality in the Bay Area, there is also edcuational inequality. According to Niche.com, Palo Alto and Los Altos have the second and third best school districts, while East Palo Alto has the worst school district. The goal of my project is to look at why such stark inequality, both income and educational, exists in the Bay Area, especially between cities so close together. The data for this project will be census data, from the ACS 5 year survey (2015-2019). Zip code data will contain 5-year estimates, while tract level data will be 1-year estimates (2019).
 
 ```{r include=FALSE}
- 
 ca_counties <- counties("CA", cb = T, progress_bar = F)
 bay_county_names <-
   c(
@@ -226,8 +225,16 @@ ggplot(
       title = "Correlation Between Income and Educational Attainment"
     )
 ```
+```{r echo=FALSE}
+model <- lm(PERC_BACH ~ MED_INCOME, combined)
 
-Looking at both maps, it is evident that there is stark income inequality and educational inequality in the Bay Area, even between zip codes that are right next to each other. It is also very clear that, from looking at the plot, there is a clear correlation between educational attainment and median household income. However, one reason this might occur is because families who don't speak English fluently have a harder time finding a job and making money, which leads to a lower educational attainment for their children, and continues the cycle of poverty. The Bay Area is a very diverse place, and areas like Atherton have a very high percentage of fluent English speakers, while areas like East Palo Alto have a high percentage of immigrants, whose first language is not necessarily English. 
+summary(model)
+```
+Looking at both maps, it is evident that there is stark income inequality and educational inequality in the Bay Area, even between zip codes that are right next to each other. It is also very clear that, from looking at the plot, there is a clear correlation between educational attainment and median household income. Looking at the model, the increase of 1 in x (income) is associated with an increase of 3.106e-04 in y (education). Also,  45.95% of the variation in the y (education) is explained by the variation in x (income). And, the p-value is very low (<2.2e-16), while the F-statistic is high, meaning the correlation is strong, and the variable and model are both significant. However, one reason this might occur is because families who don't speak English fluently have a harder time finding a job and making money, which leads to a lower educational attainment for their children, and continues the cycle of poverty. The Bay Area is a very diverse place, and areas like Atherton have a very high percentage of fluent English speakers, while areas like East Palo Alto have a high percentage of immigrants, whose first language is not necessarily English. 
+
+```{r echo=FALSE}
+
+```
 
 ```{r echo=FALSE}
 bay_multiple_tract <- 
@@ -264,6 +271,11 @@ bay_multiple_tract <-
   )
 plot_ly(data = bay_multiple_tract, x=~perc_fluent_english, y=~perc_college, z=~perc_over100k, type="scatter3d", mode="markers", color = ~perc_over100k)
 ```
+```{r echo=FALSE}
+model <- lm(perc_college ~ perc_over100k + perc_fluent_english, bay_multiple_tract)
+
+summary(model)
+```
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 a <- ggplot(
@@ -291,14 +303,8 @@ a <- ggplot(
  chart
 ```
 
+Looking at the 3D plot, we can see that there is a clear correlation between educational attainment, income, and language spoken at home. The two plots reinforce this correlation, with the best-fit lines showing an even clearer picture of the strong correlations between English fluency, educational attainment, income. Both show a very strong correlation, especially the plot comparing English fluency and educational attainment, where the best-fit line matches the trend of the data very closely. Furthermore, the model shows that the variables and model are significant; there is a high r-squared value, so 82% of variance is explained. The increase of 1 in x1 (income) is associated with an increase of 0.328 in y (education), and the increase of 1 in x2 (fluency) is associated with an increase of 0.632 in y (education). There is also a very low p-value (p<2.2e-16) and a high F-static, meaning that the variable and model are significant, and that the correlation is strong.
 
-```{r echo=FALSE}
-model <- lm(perc_college ~ perc_over100k + perc_fluent_english, bay_multiple_tract)
-
-summary(model)
-```
-
-Looking at the 3D plot, we can see that there is a clear correlation between educational attainment, income, and language spoken at home. The two plots reinforce this correlation, with the best-fit lines showing an even clearer picture of the strong correlations between English fluency, educational attainment, income. Both show a very strong correlation, especially the plot comparing English fluency and educational attainment, where the best-fit line matches the trend of the data very closely. Furthermore, the model shows that the variables and model are significant; there is a high r-squared value, so 82% of variance is explained. There is also a very low p-value (p<2.2e-16) and a high F-static, meaning that the variable and model are significant, and that the correlation is strong.
 
 ```{r include=FALSE}
 bay_combined_zips <- 
@@ -449,15 +455,16 @@ lang_zip <- read_csv("ACS5_2019_LANG.csv")[-1,] %>%
 bay_lang_case_study <-
   lang_zip %>% 
   filter(ZIPCODE == "94014" | ZIPCODE =="94127" | ZIPCODE =="94063" | ZIPCODE == "94027") %>%
-  left_join(zipcode_cities) %>% 
-  select(c(ZIPCODE, PERC_NONENG, CITY))
+  left_join(bay_case_study) %>% 
+  select(c(ZIPCODE, PERC_BACH, PERC_NONENG, CITY))
 
 lang_case_study_chart <- 
   bay_lang_case_study %>% 
   ggplot() + geom_bar(
     aes(
       x = CITY,
-      y = PERC_NONENG
+      y = PERC_NONENG,
+      fill = PERC_BACH
     ),
     stat = "identity"
   ) +
